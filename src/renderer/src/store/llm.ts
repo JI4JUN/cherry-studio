@@ -28,7 +28,7 @@ export interface LlmState {
 export const INITIAL_PROVIDERS: Provider[] = [
   {
     id: '302ai',
-    name: '302AI',
+    name: '302.AI',
     type: 'openai',
     apiKey: '',
     apiHost: 'https://api.302.ai',
