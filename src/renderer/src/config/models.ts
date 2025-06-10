@@ -485,15 +485,15 @@ export const SYSTEM_MODELS: Record<string, Model[]> = {
       group: 'Gemini'
     },
     {
-      id: 'claude-sonnet-4-20250514-thinking',
+      id: 'claude-sonnet-4-20250514',
       provider: '302ai',
-      name: 'claude-sonnet-4-20250514-thinking',
+      name: 'claude-sonnet-4-20250514',
       group: 'Anthropic'
     },
     {
-      id: 'claude-opus-4-20250514-thinking',
+      id: 'claude-opus-4-20250514',
       provider: '302ai',
-      name: 'claude-opus-4-20250514-thinking',
+      name: 'claude-opus-4-20250514',
       group: 'Anthropic'
     },
     {
