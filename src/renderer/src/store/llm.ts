@@ -27,6 +27,16 @@ export interface LlmState {
 
 export const INITIAL_PROVIDERS: Provider[] = [
   {
+    id: '302ai',
+    name: '302AI',
+    type: 'openai',
+    apiKey: '',
+    apiHost: 'https://api.302.ai',
+    models: SYSTEM_MODELS['302ai'],
+    isSystem: true,
+    enabled: true
+  },
+  {
     id: 'silicon',
     name: 'Silicon',
     type: 'openai',
