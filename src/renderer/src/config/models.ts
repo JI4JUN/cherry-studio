@@ -2161,6 +2161,14 @@ export const SYSTEM_MODELS: Record<string, Model[]> = {
       name: 'Qwen Plus',
       group: 'Qwen'
     }
+  ],
+  cephalon: [
+    {
+      id: 'DeepSeek-R1',
+      provider: 'cephalon',
+      name: 'DeepSeek-R1满血版',
+      group: 'DeepSeek'
+    }
   ]
 }
 
