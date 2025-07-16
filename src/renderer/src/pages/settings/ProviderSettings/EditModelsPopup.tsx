@@ -3,6 +3,7 @@ import CustomCollapse from '@renderer/components/CustomCollapse'
 import CustomTag from '@renderer/components/CustomTag'
 import ExpandableText from '@renderer/components/ExpandableText'
 import ModelIdWithTags from '@renderer/components/ModelIdWithTags'
+import Scrollbar from '@renderer/components/Scrollbar'
 import {
   getModelLogo,
   groupQwenModels,
@@ -16,6 +17,8 @@ import {
 } from '@renderer/config/models'
 import { useProvider } from '@renderer/hooks/useProvider'
 import FileItem from '@renderer/pages/files/FileItem'
+import NewApiAddModelPopup from '@renderer/pages/settings/ProviderSettings/NewApiAddModelPopup'
+import NewApiBatchAddModelPopup from '@renderer/pages/settings/ProviderSettings/NewApiBatchAddModelPopup'
 import { fetchModels } from '@renderer/services/ApiService'
 import { Model, Provider } from '@renderer/types'
 import { getDefaultGroupName, isFreeModel, runAsyncFunction } from '@renderer/utils'
@@ -41,6 +44,10 @@ interface Props extends ShowParams {
 // Check if the model exists in the provider's model list
 const isModelInProvider = (provider: Provider, modelId: string): boolean => {
   return provider.models.some((m) => m.id === modelId)
+}
+
+const isValidNewApiModel = (model: Model): boolean => {
+  return !!(model.supported_endpoint_types && model.supported_endpoint_types.length > 0)
 }
 
 const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
@@ -129,10 +136,21 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
   const onAddModel = useCallback(
     (model: Model) => {
       if (!isEmpty(model.name)) {
-        addModel(model)
+        if (provider.id === 'new-api') {
+          if (model.supported_endpoint_types && model.supported_endpoint_types.length > 0) {
+            addModel({
+              ...model,
+              endpoint_type: model.supported_endpoint_types[0]
+            })
+          } else {
+            NewApiAddModelPopup.show({ title: t('settings.models.add.add_model'), provider, model })
+          }
+        } else {
+          addModel(model)
+        }
       }
     },
-    [addModel]
+    [addModel, provider, t]
   )
 
   const onRemoveModel = useCallback((model: Model) => removeModel(model), [removeModel])
@@ -145,14 +163,19 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
         setListModels(
           models
             .map((model) => ({
-              id: model.id,
+              // @ts-ignore modelId
+              id: model?.id || model?.name,
               // @ts-ignore name
-              name: model.name || model.id,
+              name: model?.display_name || model?.displayName || model?.name || model?.id,
               provider: _provider.id,
-              group: getDefaultGroupName(model.id, _provider.id),
-              // @ts-ignore name
-              description: model?.description,
-              owned_by: model?.owned_by
+              // @ts-ignore group
+              group: getDefaultGroupName(model?.id || model?.name, _provider.id),
+              // @ts-ignore description
+              description: model?.description || '',
+              // @ts-ignore owned_by
+              owned_by: model?.owned_by || '',
+              // @ts-ignore supported_endpoint_types
+              supported_endpoint_types: model?.supported_endpoint_types
             }))
             .filter((model) => !isEmpty(model.name))
         )
@@ -196,7 +219,7 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
         mouseEnterDelay={0.5}
         placement="top">
         <Button
-          type={isAllFilteredInProvider ? 'default' : 'primary'}
+          type="default"
           icon={isAllFilteredInProvider ? <MinusOutlined /> : <PlusOutlined />}
           size="large"
           onClick={(e) => {
@@ -204,14 +227,27 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
             if (isAllFilteredInProvider) {
               list.filter((model) => isModelInProvider(provider, model.id)).forEach(onRemoveModel)
             } else {
-              list.filter((model) => !isModelInProvider(provider, model.id)).forEach(onAddModel)
+              const wouldAddModel = list.filter((model) => !isModelInProvider(provider, model.id))
+              if (provider.id === 'new-api') {
+                if (models.every(isValidNewApiModel)) {
+                  wouldAddModel.forEach(onAddModel)
+                } else {
+                  NewApiBatchAddModelPopup.show({
+                    title: t('settings.models.add.batch_add_models'),
+                    batchModels: wouldAddModel,
+                    provider
+                  })
+                }
+              } else {
+                wouldAddModel.forEach(onAddModel)
+              }
             }
           }}
           disabled={list.length === 0}
         />
       </Tooltip>
     )
-  }, [list, provider, onAddModel, onRemoveModel, t])
+  }, [list, t, provider, onRemoveModel, models, onAddModel])
 
   const renderGroupTools = useCallback(
     (group: string) => {
@@ -234,7 +270,20 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
               if (isAllInProvider) {
                 modelGroups[group].filter((model) => isModelInProvider(provider, model.id)).forEach(onRemoveModel)
               } else {
-                modelGroups[group].filter((model) => !isModelInProvider(provider, model.id)).forEach(onAddModel)
+                const wouldAddModel = modelGroups[group].filter((model) => !isModelInProvider(provider, model.id))
+                if (provider.id === 'new-api') {
+                  if (wouldAddModel.every(isValidNewApiModel)) {
+                    wouldAddModel.forEach(onAddModel)
+                  } else {
+                    NewApiBatchAddModelPopup.show({
+                      title: t('settings.models.add.batch_add_models'),
+                      batchModels: wouldAddModel,
+                      provider
+                    })
+                  }
+                } else {
+                  wouldAddModel.forEach(onAddModel)
+                }
               }
             }}
           />
@@ -253,11 +302,12 @@ const PopupContainer: React.FC<Props> = ({ provider: _provider, resolve }) => {
       afterClose={onClose}
       footer={null}
       width="800px"
-      styles={{
-        content: { padding: 0 },
-        header: { padding: '16px 22px 30px 22px' }
-      }}
       transitionName="animation-move-down"
+      styles={{
+        body: {
+          overflowY: 'hidden'
+        }
+      }}
       centered>
       <SearchContainer>
         <TopToolsWrapper>
@@ -355,7 +405,7 @@ const ModelListItem: React.FC<ModelListItemProps> = memo(({ model, provider, onA
   return (
     <FileItem
       style={{
-        backgroundColor: isAdded ? 'rgba(0, 126, 0, 0.06)' : 'rgba(255, 255, 255, 0.04)',
+        backgroundColor: isAdded ? 'rgba(0, 126, 0, 0.06)' : '',
         border: 'none',
         boxShadow: 'none'
       }}
@@ -377,9 +427,7 @@ const ModelListItem: React.FC<ModelListItemProps> = memo(({ model, provider, onA
 const SearchContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  padding: 0 22px;
-  margin-top: -10px;
+  gap: 5px;
 
   .ant-radio-group {
     display: flex;
@@ -391,17 +439,16 @@ const TopToolsWrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 0;
 `
 
-const ListContainer = styled.div`
+const ListContainer = styled(Scrollbar)`
   height: calc(100vh - 300px);
-  overflow-y: scroll;
-  padding: 0 6px 16px 6px;
-  margin-left: 16px;
-  margin-right: 10px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-bottom: 30px;
 `
 
 const FlexColumn = styled.div`

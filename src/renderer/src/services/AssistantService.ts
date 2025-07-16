@@ -1,8 +1,14 @@
-import { DEFAULT_CONTEXTCOUNT, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE } from '@renderer/config/constant'
+import {
+  DEFAULT_CONTEXTCOUNT,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_TEMPERATURE,
+  MAX_CONTEXT_COUNT,
+  UNLIMITED_CONTEXT_COUNT
+} from '@renderer/config/constant'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { addAssistant } from '@renderer/store/assistants'
-import type { Agent, Assistant, AssistantSettings, Model, Provider, Topic } from '@renderer/types'
+import type { Agent, Assistant, AssistantSettings, Language, Model, Provider, Topic } from '@renderer/types'
 import { uuid } from '@renderer/utils'
 
 export function getDefaultAssistant(): Assistant {
@@ -14,11 +20,21 @@ export function getDefaultAssistant(): Assistant {
     topics: [getDefaultTopic('default')],
     messages: [],
     type: 'assistant',
-    regularPhrases: [] // Added regularPhrases
+    regularPhrases: [], // Added regularPhrases
+    settings: {
+      temperature: DEFAULT_TEMPERATURE,
+      contextCount: DEFAULT_CONTEXTCOUNT,
+      enableMaxTokens: false,
+      maxTokens: 0,
+      streamOutput: true,
+      topP: 1,
+      toolUseMode: 'prompt',
+      customParameters: []
+    }
   }
 }
 
-export function getDefaultTranslateAssistant(targetLanguage: string, text: string): Assistant {
+export function getDefaultTranslateAssistant(targetLanguage: Language, text: string): Assistant {
   const translateModel = getTranslateModel()
   const assistant: Assistant = getDefaultAssistant()
   assistant.model = translateModel
@@ -29,7 +45,7 @@ export function getDefaultTranslateAssistant(targetLanguage: string, text: strin
 
   assistant.prompt = store
     .getState()
-    .settings.translateModelPrompt.replaceAll('{{target_language}}', targetLanguage)
+    .settings.translateModelPrompt.replaceAll('{{target_language}}', targetLanguage.value)
     .replaceAll('{{text}}', text)
   return assistant
 }
@@ -98,7 +114,7 @@ export const getAssistantSettings = (assistant: Assistant): AssistantSettings =>
   }
 
   return {
-    contextCount: contextCount === 100 ? 100000 : contextCount,
+    contextCount: contextCount === MAX_CONTEXT_COUNT ? UNLIMITED_CONTEXT_COUNT : contextCount,
     temperature: assistant?.settings?.temperature ?? DEFAULT_TEMPERATURE,
     topP: assistant?.settings?.topP ?? 1,
     enableMaxTokens: assistant?.settings?.enableMaxTokens ?? false,
@@ -127,7 +143,17 @@ export async function createAssistantFromAgent(agent: Agent) {
     topics: [topic],
     model: agent.defaultModel,
     type: 'assistant',
-    regularPhrases: agent.regularPhrases || [] // Ensured regularPhrases
+    regularPhrases: agent.regularPhrases || [], // Ensured regularPhrases
+    settings: agent.settings || {
+      temperature: DEFAULT_TEMPERATURE,
+      contextCount: DEFAULT_CONTEXTCOUNT,
+      enableMaxTokens: false,
+      maxTokens: 0,
+      streamOutput: true,
+      topP: 1,
+      toolUseMode: 'prompt',
+      customParameters: []
+    }
   }
 
   store.dispatch(addAssistant(assistant))

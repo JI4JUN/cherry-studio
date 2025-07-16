@@ -1,3 +1,8 @@
+// don't reorder this file, it's used to initialize the app data dir and
+// other which should be run before the main process is ready
+// eslint-disable-next-line
+import './bootstrap'
+
 import '@main/config'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
@@ -6,7 +11,7 @@ import { app } from 'electron'
 import installExtension, { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS } from 'electron-devtools-installer'
 import Logger from 'electron-log'
 
-import { isDev, isWin } from './constant'
+import { isDev, isWin, isLinux } from './constant'
 import { registerIpc } from './ipc'
 import { configManager } from './services/ConfigManager'
 import mcpService from './services/MCPService'
@@ -20,9 +25,16 @@ import selectionService, { initSelectionService } from './services/SelectionServ
 import { registerShortcuts } from './services/ShortcutService'
 import { TrayService } from './services/TrayService'
 import { windowService } from './services/WindowService'
-import { setUserDataDir } from './utils/file'
 
 Logger.initialize()
+
+/**
+ * Disable hardware acceleration if setting is enabled
+ */
+const disableHardwareAcceleration = configManager.getDisableHardwareAcceleration()
+if (disableHardwareAcceleration) {
+  app.disableHardwareAcceleration()
+}
 
 /**
  * Disable chromium's window animations
@@ -32,6 +44,14 @@ Logger.initialize()
  */
 if (isWin) {
   app.commandLine.appendSwitch('wm-window-animations-disabled')
+}
+
+/**
+ * Enable GlobalShortcutsPortal for Linux Wayland Protocol
+ * see: https://www.electronjs.org/docs/latest/api/global-shortcut
+ */
+if (isLinux && process.env.XDG_SESSION_TYPE === 'wayland') {
+  app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal')
 }
 
 // Enable features for unresponsive renderer js call stacks
@@ -72,9 +92,6 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
 } else {
-  // Portable dir must be setup before app ready
-  setUserDataDir()
-
   // This method will be called when Electron has finished
   // initialization and is ready to create browser windows.
   // Some APIs can only be used after this event occurs.
@@ -123,10 +140,19 @@ if (!app.requestSingleInstanceLock()) {
   registerProtocolClient(app)
 
   // macOS specific: handle protocol when app is already running
+
   app.on('open-url', (event, url) => {
     event.preventDefault()
     handleProtocolUrl(url)
   })
+
+  const handleOpenUrl = (args: string[]) => {
+    const url = args.find((arg) => arg.startsWith(CHERRY_STUDIO_PROTOCOL + '://'))
+    if (url) handleProtocolUrl(url)
+  }
+
+  // for windows to start with url
+  handleOpenUrl(process.argv)
 
   // Listen for second instance
   app.on('second-instance', (_event, argv) => {
@@ -134,8 +160,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // Protocol handler for Windows/Linux
     // The commandLine is an array of strings where the last item might be the URL
-    const url = argv.find((arg) => arg.startsWith(CHERRY_STUDIO_PROTOCOL + '://'))
-    if (url) handleProtocolUrl(url)
+    handleOpenUrl(argv)
   })
 
   app.on('browser-window-created', (_, window) => {

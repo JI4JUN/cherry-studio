@@ -8,13 +8,16 @@ import {
   OpenAIServiceTier,
   OpenAISummaryText,
   PaintingProvider,
+  S3Config,
   ThemeMode,
   TranslateLanguageVarious
 } from '@renderer/types'
+import { uuid } from '@renderer/utils'
+import { UpgradeChannel } from '@shared/config/constant'
 
-import { WebDAVSyncState } from './backup'
+import { RemoteSyncState } from './backup'
 
-export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter'
+export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter' | 'Alt+Enter'
 
 export type SidebarIcon = 'assistants' | 'agents' | 'paintings' | 'translate' | 'minapp' | 'knowledge' | 'files'
 
@@ -28,7 +31,7 @@ export const DEFAULT_SIDEBAR_ICONS: SidebarIcon[] = [
   'files'
 ]
 
-export interface NutstoreSyncRuntime extends WebDAVSyncState {}
+export interface NutstoreSyncRuntime extends RemoteSyncState {}
 
 export type AssistantIconType = 'model' | 'emoji' | 'none'
 
@@ -46,6 +49,7 @@ export interface SettingsState {
   proxyMode: 'system' | 'custom' | 'none'
   proxyUrl?: string
   userName: string
+  userId: string
   showPrompt: boolean
   showTokens: boolean
   showMessageDivider: boolean
@@ -67,7 +71,8 @@ export interface SettingsState {
   pasteLongTextThreshold: number
   clickAssistantToShowTopic: boolean
   autoCheckUpdate: boolean
-  earlyAccess: boolean
+  testPlan: boolean
+  testChannel: UpgradeChannel
   renderInputMessageAsMarkdown: boolean
   // 代码执行
   codeExecution: {
@@ -107,6 +112,7 @@ export interface SettingsState {
   webdavSyncInterval: number
   webdavMaxBackups: number
   webdavSkipBackupFile: boolean
+  webdavDisableStream: boolean
   translateModelPrompt: string
   autoTranslateWithSpace: boolean
   showTranslateConfirm: boolean
@@ -155,8 +161,12 @@ export interface SettingsState {
   minappsOpenLinkExternal: boolean
   // 隐私设置
   enableDataCollection: boolean
+  enableSpellCheck: boolean
+  spellCheckLanguages: string[]
   enableQuickPanelTriggers: boolean
   enableBackspaceDeleteModel: boolean
+  // 硬件加速设置
+  disableHardwareAcceleration: boolean
   exportMenuOptions: {
     image: boolean
     markdown: boolean
@@ -167,6 +177,7 @@ export interface SettingsState {
     obsidian: boolean
     siyuan: boolean
     docx: boolean
+    plain_text: boolean
   }
   // OpenAI
   openAI: {
@@ -177,9 +188,16 @@ export interface SettingsState {
   notification: {
     assistant: boolean
     backup: boolean
-    knowledgeEmbed: boolean
+    knowledge: boolean
   }
+  // Local backup settings
+  localBackupDir: string
+  localBackupAutoSync: boolean
+  localBackupSyncInterval: number
+  localBackupMaxBackups: number
+  localBackupSkipBackupFile: boolean
   defaultPaintingProvider: PaintingProvider
+  s3: S3Config
 }
 
 export type MultiModelMessageStyle = 'horizontal' | 'vertical' | 'fold' | 'grid'
@@ -190,10 +208,11 @@ export const initialState: SettingsState = {
   assistantsTabSortType: 'list',
   sendMessageShortcut: 'Enter',
   language: navigator.language as LanguageVarious,
-  targetLanguage: 'english' as TranslateLanguageVarious,
+  targetLanguage: 'en-us',
   proxyMode: 'system',
   proxyUrl: undefined,
   userName: '',
+  userId: uuid(),
   showPrompt: true,
   showTokens: true,
   showMessageDivider: true,
@@ -217,7 +236,8 @@ export const initialState: SettingsState = {
   pasteLongTextThreshold: 1500,
   clickAssistantToShowTopic: true,
   autoCheckUpdate: true,
-  earlyAccess: false,
+  testPlan: false,
+  testChannel: UpgradeChannel.LATEST,
   renderInputMessageAsMarkdown: false,
   codeExecution: {
     enabled: false,
@@ -254,6 +274,7 @@ export const initialState: SettingsState = {
   webdavSyncInterval: 0,
   webdavMaxBackups: 0,
   webdavSkipBackupFile: false,
+  webdavDisableStream: false,
   translateModelPrompt: TRANSLATE_PROMPT,
   autoTranslateWithSpace: false,
   showTranslateConfirm: true,
@@ -297,8 +318,12 @@ export const initialState: SettingsState = {
   showOpenedMinappsInSidebar: true,
   minappsOpenLinkExternal: false,
   enableDataCollection: false,
+  enableSpellCheck: false,
+  spellCheckLanguages: [],
   enableQuickPanelTriggers: false,
   enableBackspaceDeleteModel: true,
+  // 硬件加速设置
+  disableHardwareAcceleration: false,
   exportMenuOptions: {
     image: true,
     markdown: true,
@@ -308,7 +333,8 @@ export const initialState: SettingsState = {
     joplin: true,
     obsidian: true,
     siyuan: true,
-    docx: true
+    docx: true,
+    plain_text: true
   },
   // OpenAI
   openAI: {
@@ -318,9 +344,27 @@ export const initialState: SettingsState = {
   notification: {
     assistant: false,
     backup: false,
-    knowledgeEmbed: false
+    knowledge: false
   },
-  defaultPaintingProvider: 'aihubmix'
+  // Local backup settings
+  localBackupDir: '',
+  localBackupAutoSync: false,
+  localBackupSyncInterval: 0,
+  localBackupMaxBackups: 0,
+  localBackupSkipBackupFile: false,
+  defaultPaintingProvider: 'aihubmix',
+  s3: {
+    endpoint: '',
+    region: '',
+    bucket: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    root: '',
+    autoSync: false,
+    syncInterval: 0,
+    maxBackups: 0,
+    skipBackupFile: false
+  }
 }
 
 const settingsSlice = createSlice({
@@ -420,8 +464,11 @@ const settingsSlice = createSlice({
     setAutoCheckUpdate: (state, action: PayloadAction<boolean>) => {
       state.autoCheckUpdate = action.payload
     },
-    setEarlyAccess: (state, action: PayloadAction<boolean>) => {
-      state.earlyAccess = action.payload
+    setTestPlan: (state, action: PayloadAction<boolean>) => {
+      state.testPlan = action.payload
+    },
+    setTestChannel: (state, action: PayloadAction<UpgradeChannel>) => {
+      state.testChannel = action.payload
     },
     setRenderInputMessageAsMarkdown: (state, action: PayloadAction<boolean>) => {
       state.renderInputMessageAsMarkdown = action.payload
@@ -455,6 +502,9 @@ const settingsSlice = createSlice({
     },
     setWebdavSkipBackupFile: (state, action: PayloadAction<boolean>) => {
       state.webdavSkipBackupFile = action.payload
+    },
+    setWebdavDisableStream: (state, action: PayloadAction<boolean>) => {
+      state.webdavDisableStream = action.payload
     },
     setCodeExecution: (state, action: PayloadAction<{ enabled?: boolean; timeoutMinutes?: number }>) => {
       if (action.payload.enabled !== undefined) {
@@ -655,6 +705,12 @@ const settingsSlice = createSlice({
     setEnableDataCollection: (state, action: PayloadAction<boolean>) => {
       state.enableDataCollection = action.payload
     },
+    setEnableSpellCheck: (state, action: PayloadAction<boolean>) => {
+      state.enableSpellCheck = action.payload
+    },
+    setSpellCheckLanguages: (state, action: PayloadAction<string[]>) => {
+      state.spellCheckLanguages = action.payload
+    },
     setExportMenuOptions: (state, action: PayloadAction<typeof initialState.exportMenuOptions>) => {
       state.exportMenuOptions = action.payload
     },
@@ -663,6 +719,9 @@ const settingsSlice = createSlice({
     },
     setEnableBackspaceDeleteModel: (state, action: PayloadAction<boolean>) => {
       state.enableBackspaceDeleteModel = action.payload
+    },
+    setDisableHardwareAcceleration: (state, action: PayloadAction<boolean>) => {
+      state.disableHardwareAcceleration = action.payload
     },
     setOpenAISummaryText: (state, action: PayloadAction<OpenAISummaryText>) => {
       state.openAI.summaryText = action.payload
@@ -673,8 +732,30 @@ const settingsSlice = createSlice({
     setNotificationSettings: (state, action: PayloadAction<SettingsState['notification']>) => {
       state.notification = action.payload
     },
+    // Local backup settings
+    setLocalBackupDir: (state, action: PayloadAction<string>) => {
+      state.localBackupDir = action.payload
+    },
+    setLocalBackupAutoSync: (state, action: PayloadAction<boolean>) => {
+      state.localBackupAutoSync = action.payload
+    },
+    setLocalBackupSyncInterval: (state, action: PayloadAction<number>) => {
+      state.localBackupSyncInterval = action.payload
+    },
+    setLocalBackupMaxBackups: (state, action: PayloadAction<number>) => {
+      state.localBackupMaxBackups = action.payload
+    },
+    setLocalBackupSkipBackupFile: (state, action: PayloadAction<boolean>) => {
+      state.localBackupSkipBackupFile = action.payload
+    },
     setDefaultPaintingProvider: (state, action: PayloadAction<PaintingProvider>) => {
       state.defaultPaintingProvider = action.payload
+    },
+    setS3: (state, action: PayloadAction<S3Config>) => {
+      state.s3 = action.payload
+    },
+    setS3Partial: (state, action: PayloadAction<Partial<S3Config>>) => {
+      state.s3 = { ...state.s3, ...action.payload }
     }
   }
 })
@@ -712,7 +793,8 @@ export const {
   setAssistantIconType,
   setPasteLongTextAsFile,
   setAutoCheckUpdate,
-  setEarlyAccess,
+  setTestPlan,
+  setTestChannel,
   setRenderInputMessageAsMarkdown,
   setClickAssistantToShowTopic,
   setSkipBackupFile,
@@ -724,6 +806,7 @@ export const {
   setWebdavSyncInterval,
   setWebdavMaxBackups,
   setWebdavSkipBackupFile,
+  setWebdavDisableStream,
   setCodeExecution,
   setCodeEditor,
   setCodePreview,
@@ -774,13 +857,24 @@ export const {
   setShowOpenedMinappsInSidebar,
   setMinappsOpenLinkExternal,
   setEnableDataCollection,
-  setEnableQuickPanelTriggers,
+  setEnableSpellCheck,
+  setSpellCheckLanguages,
   setExportMenuOptions,
+  setEnableQuickPanelTriggers,
   setEnableBackspaceDeleteModel,
+  setDisableHardwareAcceleration,
   setOpenAISummaryText,
   setOpenAIServiceTier,
   setNotificationSettings,
-  setDefaultPaintingProvider
+  // Local backup settings
+  setLocalBackupDir,
+  setLocalBackupAutoSync,
+  setLocalBackupSyncInterval,
+  setLocalBackupMaxBackups,
+  setLocalBackupSkipBackupFile,
+  setDefaultPaintingProvider,
+  setS3,
+  setS3Partial
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

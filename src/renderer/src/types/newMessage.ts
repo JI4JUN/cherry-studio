@@ -2,11 +2,12 @@ import type { CompletionUsage } from 'openai/resources'
 
 import type {
   Assistant,
-  FileType,
+  FileMetadata,
   GenerateImageResponse,
   KnowledgeReference,
   MCPServer,
   MCPToolResponse,
+  MemoryItem,
   Metrics,
   Model,
   Topic,
@@ -94,7 +95,7 @@ export interface CodeMessageBlock extends BaseMessageBlock {
 export interface ImageMessageBlock extends BaseMessageBlock {
   type: MessageBlockType.IMAGE
   url?: string // For generated images or direct links
-  file?: FileType // For user uploaded image files
+  file?: FileMetadata // For user uploaded image files
   metadata?: BaseMessageBlock['metadata'] & {
     prompt?: string
     negativePrompt?: string
@@ -119,12 +120,13 @@ export interface CitationMessageBlock extends BaseMessageBlock {
   type: MessageBlockType.CITATION
   response?: WebSearchResponse
   knowledge?: KnowledgeReference[]
+  memories?: MemoryItem[]
 }
 
 // 文件块
 export interface FileMessageBlock extends BaseMessageBlock {
   type: MessageBlockType.FILE
-  file: FileType // 文件信息
+  file: FileMetadata // 文件信息
 }
 // 错误块
 export interface ErrorMessageBlock extends BaseMessageBlock {
@@ -173,6 +175,9 @@ export type Message = {
   useful?: boolean
   askId?: string // 关联的问题消息ID
   mentions?: Model[]
+  /**
+   * @deprecated
+   */
   enabledMCPs?: MCPServer[]
 
   usage?: Usage
@@ -203,9 +208,12 @@ export interface MessageInputBaseParams {
   assistant: Assistant
   topic: Topic
   content?: string
-  files?: FileType[]
+  files?: FileMetadata[]
   knowledgeBaseIds?: string[]
   mentions?: Model[]
+  /**
+   * @deprecated
+   */
   enabledMCPs?: MCPServer[]
   usage?: CompletionUsage
 }
